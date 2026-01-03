@@ -13,11 +13,13 @@ gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 def get_audio_url(youtube_url):
     """Gets the raw audio link so the AI can 'listen' to the video"""
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
-    }
+  ydl_opts = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'no_warnings': True,
+    # THIS LINE IS THE FIX:
+    'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}
+}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(youtube_url, download=False)
         return info['url']
