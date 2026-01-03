@@ -1,64 +1,42 @@
 import os
-import re
-import yt_dlp
-import assemblyai as aai
+import requests
 from flask import Flask, render_template, request, jsonify
-from google import genai  # Correct 2026 SDK
+from google import genai
 
 app = Flask(__name__)
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# 1. SETUP CLIENTS
-aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
-
-# Fix for the ValueError: explicitly pass the key to the Client
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
-if not gemini_api_key:
-    # This helps you debug in the Render logs
-    print("CRITICAL ERROR: GEMINI_API_KEY is missing from environment variables!")
-    
-client = genai.Client(api_key=gemini_api_key)
-
-def get_audio_url(youtube_url):
-    """Bypasses YouTube blocks by using embedded player clients"""
-    ydl_opts = {
-        'format': 'm4a/bestaudio/best',
-        'quiet': True,
-        'extractor_args': {'youtube': {'player_client': ['web_embedded', 'web', 'tv']}}
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(youtube_url, download=False)
-        return info['url']
-
-@app.route('/')
-def index():
-    return render_template('index.html')
+def get_video_id(url):
+    import re
+    reg = r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'
+    match = re.search(reg, url)
+    return match.group(1) if match else None
 
 @app.route('/generate', methods=['POST'])
 def handle_generation():
     video_url = request.json.get('url')
+    video_id = get_video_id(video_url)
+    
+    # 1. Ask Scrapingdog for the transcript
+    # They handle all the "bot detection" and "sign-in" blocks for you.
+    sd_api_key = os.environ.get("SCRAPINGDOG_API_KEY")
+    sd_url = "https://api.scrapingdog.com/youtube/transcripts/"
+    params = {"api_key": sd_api_key, "v": video_id}
     
     try:
-        # Step 1: Extract Audio URL
-        audio_url = get_audio_url(video_url)
-
-        # Step 2: Transcribe (AI hears the video)
-        transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(audio_url)
+        response = requests.get(sd_url, params=params)
+        data = response.json()
         
-        if transcript.status == aai.TranscriptStatus.error:
-            return jsonify({"error": "Transcription failed. Try a shorter video."}), 500
+        # Extract the text from the API response
+        transcript_text = " ".join([item['text'] for item in data])
         
-        # Step 3: Generate Textbook Notes
-        # We use Gemini 1.5 Flash for high detail and speed
-        response = client.models.generate_content(
+        # 2. Give that text to Gemini for the notes
+        notes_response = client.models.generate_content(
             model='gemini-1.5-flash',
-            contents=f"Act as a Professor. Write an extremely long, detailed textbook chapter based on this video text. Do not summarize. Use headings, examples, and deep definitions: {transcript.text}"
+            contents=f"Write long, detailed textbook notes for: {transcript_text}"
         )
         
-        return jsonify({"notes": response.text})
+        return jsonify({"notes": notes_response.text})
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        return jsonify({"error": "External API failure. Check credits or key."}), 500
