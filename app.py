@@ -29,34 +29,38 @@ def handle_generation():
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL"}), 400
     
-    # 1. Fetch Transcript
+    # NEW SMARTER TRANSCRIPT LOGIC
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([t['text'] for t in transcript_list])
-    except Exception:
-        return jsonify({"error": "Transcript not available for this video."}), 400
+        # Get all available transcripts
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+        try:
+            # 1. Try to find manually created English transcript
+            transcript = transcript_list.find_manually_created_transcript(['en'])
+        except:
+            try:
+                # 2. If no manual, try auto-generated English
+                transcript = transcript_list.find_generated_transcript(['en'])
+            except:
+                # 3. If no English at all, find ANY transcript and translate it to English
+                # This makes foreign language videos work too!
+                transcript = transcript_list.find_transcript(['en']).translate('en')
+
+        transcript_data = transcript.fetch()
+        transcript_text = " ".join([t['text'] for t in transcript_data])
+        
+    except Exception as e:
+        # If it still fails, the video truly has zero captions (rare)
+        return jsonify({"error": "This video has no captions enabled. Try a video with the 'CC' icon."}), 400
     
-    # 2. Generate Detailed Notes via Gemini
+    # 2. Generate Detailed Notes via Gemini (Existing Logic)
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = f"""
-        Act as a Senior University Professor. Convert the following transcript into a 
-        VERY DETAILED, long-form textbook chapter. 
-        
-        RULES:
-        - DO NOT SUMMARIZE. Explain every point in depth.
-        - Use H1 for titles, H2 and H3 for sub-sections.
-        - Use bullet points for lists but keep the main explanations in long paragraphs.
-        - Add a 'Key Terms' section with definitions.
-        - Add an 'Examples' section for complex logic.
-        
-        TRANSCRIPT:
-        {transcript_text}
-        """
+        prompt = f"Act as a Senior University Professor. Convert the following transcript into a VERY DETAILED, long-form textbook chapter. DO NOT SUMMARIZE. Explain every point in depth with headings, examples, and key terms: {transcript_text}"
         response = model.generate_content(prompt)
         return jsonify({"notes": response.text})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+        return jsonify({"error": "AI Error: " + str(e)}), 500
+  
 if __name__ == '__main__':
     app.run(debug=True)
