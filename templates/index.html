@@ -1,1 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Study Architect</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 YouTube Study Architect</h1>
+            <p>Paste a video link and get a full textbook chapter back.</p>
+        </header>
 
+        <div class="input-area">
+            <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=...">
+            <button id="generateBtn">Build My Notes</button>
+        </div>
+
+        <div id="loader" class="hidden">
+            <div class="spinner"></div>
+            <p>Analyzing video and writing detailed notes... please wait.</p>
+        </div>
+
+        <div id="outputContainer" class="hidden">
+            <button class="print-btn" onclick="window.print()">Save as PDF</button>
+            <div id="notesDisplay"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
