@@ -1,5 +1,4 @@
 flask
-yt-dlp
-assemblyai
+requests
 google-genai
 gunicorn
