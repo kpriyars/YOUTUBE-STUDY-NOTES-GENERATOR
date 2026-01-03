@@ -2,12 +2,13 @@ import os
 import re
 from flask import Flask, render_template, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
-import google.generativeai as genai
+from google import genai  # NEW SDK IMPORT
 
 app = Flask(__name__)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+# Initialize the new Client
+# It will automatically find your GEMINI_API_KEY environment variable
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 def extract_video_id(url):
     pattern = r'(?:v=|\/)([0-9A-Za-z_-]{11}).*'
@@ -27,18 +28,16 @@ def handle_generation():
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL"}), 400
     
-    # ULTIMATE TRANSCRIPT FETCHING LOGIC
+    # TRANSCRIPT LOGIC
     try:
-        # Check if cookie file exists
         cookie_path = 'youtube_cookies.txt'
-        
-        # If the file is on GitHub/Render, use it to bypass blocks
+        # Use cookies if available to bypass YouTube bot blocking
         if os.path.exists(cookie_path):
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookie_path)
         else:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # Try English Manual, then English Auto, then Translate any other to English
+        # Priority: Manual English -> Auto English -> Translation
         try:
             transcript = transcript_list.find_manually_created_transcript(['en'])
         except:
@@ -51,23 +50,17 @@ def handle_generation():
         transcript_text = " ".join([t['text'] for t in transcript_data])
         
     except Exception as e:
-        return jsonify({"error": f"YouTube is still blocking this. Error details: {str(e)}"}), 400
+        return jsonify({"error": f"YouTube blocked the request. Try uploading fresh youtube_cookies.txt."}), 400
     
-    # AI Generation
+    # AI GENERATION (NEW SDK SYNTAX)
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = f"""
-        Write VERY DETAILED textbook-style notes. 
-        - DO NOT SUMMARIZE. 
-        - Explain every single concept in the transcript.
-        - Use H1, H2, H3, and long paragraphs.
-        - Provide definitions and examples.
-        Transcript: {transcript_text}
-        """
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=f"Write VERY DETAILED textbook-style notes. DO NOT SUMMARIZE. Explain every concept in depth with headings and examples based on this: {transcript_text}"
+        )
         return jsonify({"notes": response.text})
     except Exception as e:
-        return jsonify({"error": "AI Error"}), 500
+        return jsonify({"error": "AI Model Error. Check your API Key."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
