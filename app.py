@@ -9,8 +9,13 @@ app = Flask(__name__)
 
 # Initialize Clients
 aai.settings.api_key = os.environ.get("ASSEMBLYAI_API_KEY")
-gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+# This version explicitly tells the AI to use the key from Render's settings
+api_key_value = os.environ.get("GEMINI_API_KEY")
 
+if not api_key_value:
+    raise ValueError("GEMINI_API_KEY is not set in Render environment variables!")
+
+client = genai.Client(api_key=api_key_value)
 def get_audio_url(youtube_url):
     """Gets the raw audio link so the AI can 'listen' to the video"""
   ydl_opts = {
